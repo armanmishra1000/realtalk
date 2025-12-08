@@ -71,20 +71,7 @@ export function useAudioRecorder(): AudioRecorderHook {
       } catch (e) {
         console.warn('High quality audio constraints failed, falling back to basic audio', e);
         // Attempt 2: Basic Audio (Fallback)
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch (fallbackError) {
-          // Both attempts failed. Now we check for devices to give a better error message.
-          // We do this AFTER trying to record, because asking for permission happens during getUserMedia.
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const hasAudioInput = devices.some(device => device.kind === 'audioinput');
-          
-          if (!hasAudioInput) {
-            throw new Error('No microphone found. Please check your system settings.');
-          }
-          
-          throw fallbackError; // If mic exists but still failed, rethrow the error
-        }
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
       
       streamRef.current = stream;
@@ -122,18 +109,26 @@ export function useAudioRecorder(): AudioRecorderHook {
       worklet.connect(audioContext.destination); 
 
       setIsRecording(true);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to start recording', err);
-      // Differentiate errors
-      if (err.message.includes('Microphone access not supported')) {
-          setError(err.message);
-      } else if (err.name === 'NotAllowedError') {
-          setError('Microphone permission denied. Please allow access.');
-      } else if (err.name === 'NotFoundError') {
-          setError('No microphone found.');
+      
+      // Type-safe error handling
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      const errorName = err instanceof DOMException ? err.name : '';
+      
+      // Provide specific user-friendly messages based on error type
+      if (errorMessage.includes('Microphone access not supported')) {
+        setError(errorMessage);
+      } else if (errorName === 'NotAllowedError') {
+        setError('Microphone permission denied. Please allow access in browser settings.');
+      } else if (errorName === 'NotFoundError') {
+        setError('No microphone found. Please connect a microphone.');
+      } else if (errorName === 'NotReadableError') {
+        setError('Microphone is in use by another app. Please close it and try again.');
+      } else if (errorName === 'OverconstrainedError') {
+        setError('Microphone constraints not supported by your device.');
       } else {
-          setError('Could not access microphone: ' + (err.message || 'Unknown error'));
+        setError('Could not access microphone: ' + errorMessage);
       }
       stopRecording();
     }
