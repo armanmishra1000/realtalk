@@ -56,15 +56,7 @@ export function useAudioRecorder(): AudioRecorderHook {
         throw new Error('Microphone access not supported. Ensure you are on HTTPS or localhost.');
       }
       
-      // 1. Check for available devices first
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const hasAudioInput = devices.some(device => device.kind === 'audioinput');
-      
-      if (!hasAudioInput) {
-        throw new Error('No microphone found. Please check your system settings.');
-      }
-
-      // 2. Get Microphone Stream with Fallback Strategy
+      // 1. Get Microphone Stream with Fallback Strategy
       let stream: MediaStream;
       
       try {
@@ -82,7 +74,16 @@ export function useAudioRecorder(): AudioRecorderHook {
         try {
           stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch (fallbackError) {
-          throw fallbackError; // If this fails, real error will be caught below
+          // Both attempts failed. Now we check for devices to give a better error message.
+          // We do this AFTER trying to record, because asking for permission happens during getUserMedia.
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const hasAudioInput = devices.some(device => device.kind === 'audioinput');
+          
+          if (!hasAudioInput) {
+            throw new Error('No microphone found. Please check your system settings.');
+          }
+          
+          throw fallbackError; // If mic exists but still failed, rethrow the error
         }
       }
       
