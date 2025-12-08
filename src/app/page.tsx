@@ -1,63 +1,149 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAppStore } from '@/lib/store';
+import { getDiscountPercentage } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Check, Sparkles, ArrowRight } from 'lucide-react';
+
+export default function LandingPage() {
+  const router = useRouter();
+  const { userState, completeOnboarding, setStartDate } = useAppStore();
+  const [mounted, setMounted] = useState(false);
+  const [email, setEmail] = useState('');
+  const [currentDate, setCurrentDate] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Avoid synchronous state update warning
+    const timer = setTimeout(() => {
+        setMounted(true);
+        setCurrentDate(Date.now());
+        // Initialize start date if not set (though store sets it to Date.now() default)
+        if (!userState.startDate) {
+          setStartDate(Date.now());
+        }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [userState.startDate, setStartDate]);
+
+  // Redirect if already onboarded
+  useEffect(() => {
+    if (mounted && userState.hasCompletedOnboarding) {
+      router.push('/speak');
+    }
+  }, [mounted, userState.hasCompletedOnboarding, router]);
+
+  if (!mounted || !currentDate) return null;
+
+  const discount = getDiscountPercentage(userState.startDate);
+  const daysPassed = Math.floor((currentDate - userState.startDate) / (1000 * 60 * 60 * 24));
+  const dayOfTrial = Math.min(daysPassed + 1, 7);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (email) {
+      completeOnboarding();
+      router.push('/speak');
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="min-h-screen bg-white text-gray-900">
+      {/* Header */}
+      <header className="fixed top-0 w-full bg-white/80 p-4 backdrop-blur-md z-10">
+        <div className="mx-auto max-w-md text-center">
+          <h1 className="text-2xl font-bold tracking-tighter">
+            RealTalk<span className="text-blue-600">.ai</span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-md px-4 pb-24 pt-20">
+        {/* Hero Section */}
+        <div className="mb-8 text-center">
+          <div className="mb-4 inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+            <Sparkles className="mr-1 h-3 w-3" />
+            AI-Powered Language Learning
+          </div>
+          <h2 className="mb-2 text-3xl font-bold">Speak Confidently.</h2>
+          <p className="text-gray-500">
+            Real-time conversation practice with advanced AI that listens, understands, and corrects you.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Trial & Discount Card */}
+        <Card className="mb-8 overflow-hidden border-blue-100 bg-gradient-to-b from-blue-50 to-white">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+              <span className="text-xl font-bold">{7 - daysPassed}</span>
+            </div>
+            <CardTitle className="text-blue-900">Free 7 Days Trial</CardTitle>
+            <p className="text-sm text-blue-600 font-medium">Day {dayOfTrial} of 7</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {discount > 0 ? (
+              <div className="rounded-xl bg-white p-4 shadow-sm border border-blue-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-gray-700">Pay Now Offer</span>
+                  <span className="font-bold text-green-600">Save {discount}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div 
+                    className="h-full bg-green-500 transition-all duration-1000" 
+                    style={{ width: `${discount}%` }} 
+                  />
+                </div>
+                <p className="mt-2 text-xs text-gray-500 text-center">
+                  Discount decreases daily. Lock in your price today!
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-gray-100 p-4 text-center text-sm text-gray-500">
+                Trial ending soon. Subscribe to continue learning.
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <div className="flex items-center text-sm text-gray-600">
+                <Check className="mr-2 h-4 w-4 text-green-500" />
+                Unlimited Roleplay Scenarios
+              </div>
+              <div className="flex items-center text-sm text-gray-600">
+                <Check className="mr-2 h-4 w-4 text-green-500" />
+                Real-time Pronunciation Feedback
+              </div>
+              <div className="flex items-center text-sm text-gray-600">
+                <Check className="mr-2 h-4 w-4 text-green-500" />
+                Native Accent Options
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Login Form */}
+        <div className="fixed bottom-0 left-0 right-0 border-t bg-white p-4 pb-8">
+          <div className="mx-auto max-w-md">
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Input 
+                  type="email" 
+                  placeholder="Enter your email" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" size="lg">
+                Start Learning <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </form>
+            <p className="mt-4 text-center text-xs text-gray-400">
+              By continuing, you agree to our Terms of Service and Privacy Policy.
+            </p>
+          </div>
         </div>
       </main>
     </div>
