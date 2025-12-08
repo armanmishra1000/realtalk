@@ -56,15 +56,36 @@ export function useAudioRecorder(): AudioRecorderHook {
         throw new Error('Microphone access not supported. Ensure you are on HTTPS or localhost.');
       }
       
-      // 1. Get Microphone Stream
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          // sampleRate: 16000 // Removed to let browser decide native hardware rate
-        } 
-      });
+      // 1. Check for available devices first
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasAudioInput = devices.some(device => device.kind === 'audioinput');
+      
+      if (!hasAudioInput) {
+        throw new Error('No microphone found. Please check your system settings.');
+      }
+
+      // 2. Get Microphone Stream with Fallback Strategy
+      let stream: MediaStream;
+      
+      try {
+        // Attempt 1: High Quality Constraints
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: { 
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          } 
+        });
+      } catch (e) {
+        console.warn('High quality audio constraints failed, falling back to basic audio', e);
+        // Attempt 2: Basic Audio (Fallback)
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (fallbackError) {
+          throw fallbackError; // If this fails, real error will be caught below
+        }
+      }
+      
       streamRef.current = stream;
 
       // 2. Create Audio Context without forcing sampleRate
