@@ -7,7 +7,29 @@ import { generateId } from '@/lib/utils';
 
 const MODEL = 'models/gemini-2.0-flash-exp';
 
-function arrayBufferToBase64(buffer: ArrayBuffer) {
+// Type definitions for Gemini Live API messages
+interface GeminiServerContent {
+  modelTurn?: {
+    parts?: Array<{
+      text?: string;
+      inlineData?: {
+        mimeType: string;
+        data: string;
+      };
+    }>;
+  };
+  turnComplete?: boolean;
+  interrupted?: boolean;
+  inputTranscription?: { text: string };
+  outputTranscription?: { text: string };
+}
+
+interface GeminiServerMessage {
+  setupComplete?: Record<string, never>;
+  serverContent?: GeminiServerContent;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
   let binary = '';
   const bytes = new Uint8Array(buffer);
   const len = bytes.byteLength;
@@ -59,12 +81,12 @@ export function useGeminiLive() {
           Context: ${currentScenario.description}`;
         }
         
-        // Send Setup Message
+        // Send Setup Message with transcription enabled
         const setupMsg = {
           setup: {
             model: MODEL,
             generationConfig: {
-              responseModalities: ['AUDIO'], // Removed TEXT to avoid 1007/400 error
+              responseModalities: ['AUDIO'],
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
@@ -77,7 +99,10 @@ export function useGeminiLive() {
               parts: [{ 
                 text: systemPrompt
               }]
-            }
+            },
+            // Enable transcription for both input and output audio
+            inputAudioTranscription: {},
+            outputAudioTranscription: {}
           }
         };
         console.log('Sending Setup Message:', JSON.stringify(setupMsg, null, 2));
@@ -93,29 +118,66 @@ export function useGeminiLive() {
         }
   
         try {
-          // console.log('Received WebSocket Message:', data); // Too verbose, only log if needed
-          const response = JSON.parse(data as string);
+          const response = JSON.parse(data as string) as GeminiServerMessage;
+          
+          // Handle setup complete - send greeting prompt to trigger AI response
+          if (response.setupComplete) {
+            console.log('Setup complete, sending greeting prompt');
+            const greetingMsg = {
+              clientContent: {
+                turns: [{
+                  role: 'user',
+                  parts: [{ 
+                    text: `Greet me warmly in ${settings.targetLanguage}. Introduce yourself as my friendly language tutor. Keep it brief and natural.`
+                  }]
+                }],
+                turnComplete: true
+              }
+            };
+            ws.send(JSON.stringify(greetingMsg));
+            return;
+          }
           
           if (response.serverContent) {
-            const { modelTurn, turnComplete } = response.serverContent;
+            const { modelTurn, inputTranscription, outputTranscription } = response.serverContent;
 
-            if (turnComplete) {
-                // console.log("Turn Complete");
+            // Handle user's speech transcription (real-time)
+            if (inputTranscription?.text) {
+              const transcript = inputTranscription.text.trim();
+              if (transcript) {
+                setMessages(prev => {
+                  const lastMsg = prev[prev.length - 1];
+                  // Append to existing user message if recent
+                  if (lastMsg && lastMsg.role === 'user' && (Date.now() - lastMsg.timestamp < 3000)) {
+                    return prev.map((msg, i) => 
+                      i === prev.length - 1 ? { ...msg, text: msg.text + ' ' + transcript } : msg
+                    );
+                  }
+                  return [...prev, { id: generateId(), role: 'user', text: transcript, timestamp: Date.now() }];
+                });
+              }
             }
 
+            // Handle AI's speech transcription (real-time)
+            if (outputTranscription?.text) {
+              const transcript = outputTranscription.text.trim();
+              if (transcript) {
+                setMessages(prev => {
+                  const lastMsg = prev[prev.length - 1];
+                  // Append to existing model message if recent
+                  if (lastMsg && lastMsg.role === 'model' && (Date.now() - lastMsg.timestamp < 5000)) {
+                    return prev.map((msg, i) => 
+                      i === prev.length - 1 ? { ...msg, text: msg.text + transcript, isAudioMessage: false } : msg
+                    );
+                  }
+                  return [...prev, { id: generateId(), role: 'model', text: transcript, timestamp: Date.now() }];
+                });
+              }
+            }
+
+            // Handle audio data from model
             if (modelTurn?.parts) {
               for (const part of modelTurn.parts) {
-                if (part.text) {
-                  setMessages(prev => {
-                    const lastMsg = prev[prev.length - 1];
-                    if (lastMsg && lastMsg.role === 'model' && (Date.now() - lastMsg.timestamp < 5000)) {
-                        // If we are appending text to an existing audio message, ensure we don't overwrite isAudioMessage if we want to keep the waveform
-                        // actually, if text comes, we should show text. 
-                        return prev.map((msg, i) => i === prev.length - 1 ? { ...msg, text: msg.text + part.text } : msg);
-                    }
-                     return [...prev, { id: generateId(), role: 'model', text: part.text, timestamp: Date.now() }];
-                  });
-                }
                 if (part.inlineData && part.inlineData.mimeType.startsWith('audio/pcm')) {
                   const base64 = part.inlineData.data;
                   const binaryString = atob(base64);
@@ -126,22 +188,18 @@ export function useGeminiLive() {
                   }
                   playChunk(bytes.buffer);
 
-                  // Update UI to show audio message bubble if no text is present
+                  // Create placeholder if no transcription yet
                   setMessages(prev => {
                     const lastMsg = prev[prev.length - 1];
                     if (lastMsg && lastMsg.role === 'model' && (Date.now() - lastMsg.timestamp < 5000)) {
-                        if (!lastMsg.isAudioMessage) {
-                             return prev.map((msg, i) => i === prev.length - 1 ? { ...msg, isAudioMessage: true } : msg);
-                        }
-                        return prev;
+                      return prev;
                     }
-                    // Create new placeholder message for audio
                     return [...prev, { 
-                        id: generateId(), 
-                        role: 'model', 
-                        text: '', // Empty text, UI will handle isAudioMessage
-                        timestamp: Date.now(),
-                        isAudioMessage: true 
+                      id: generateId(), 
+                      role: 'model', 
+                      text: '',
+                      timestamp: Date.now(),
+                      isAudioMessage: true 
                     }];
                   });
                 }
@@ -183,65 +241,28 @@ export function useGeminiLive() {
     setIsConnected(false);
   }, [stopRecording, stopPlayer]);
 
-  // Initialize Speech Recognition for User Text Fallback
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = false;
-        recognition.lang = settings.targetLanguage === 'Spanish' ? 'es-ES' : 'en-US'; // Simple mapping for prototype
-        
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        recognition.onresult = (event: any) => {
-            const transcript = event.results[event.results.length - 1][0].transcript;
-            if (transcript) {
-                setMessages(prev => [...prev, { id: generateId(), role: 'user', text: transcript, timestamp: Date.now() }]);
-            }
-        };
-        recognitionRef.current = recognition;
-      }
-    }
-  }, [settings.targetLanguage]);
-
   const toggleRecording = useCallback(async () => {
     if (isRecording) {
       stopRecording();
-      if (recognitionRef.current) {
-          recognitionRef.current.stop();
-      }
     } else {
       try {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
           await connect();
         }
-        
-        // Start Web Speech API
-        if (recognitionRef.current) {
-            try {
-                recognitionRef.current.start();
-            } catch (e) {
-                console.error("Speech recognition error", e);
-            }
-        }
 
         await startRecording((pcmData) => {
           if (wsRef.current?.readyState === WebSocket.OPEN) {
-             const base64 = arrayBufferToBase64(pcmData);
-             const msg = {
-               realtime_input: {
-                 media_chunks: [{
-                   mime_type: 'audio/pcm',
-                   data: base64
-                 }]
-               }
-             };
-             wsRef.current.send(JSON.stringify(msg));
+            const base64 = arrayBufferToBase64(pcmData);
+            // Use current API format (not deprecated media_chunks)
+            const msg = {
+              realtimeInput: {
+                audio: {
+                  mimeType: 'audio/pcm;rate=16000',
+                  data: base64
+                }
+              }
+            };
+            wsRef.current.send(JSON.stringify(msg));
           }
         });
       } catch (err) {
@@ -253,10 +274,7 @@ export function useGeminiLive() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-        disconnect();
-        if (recognitionRef.current) {
-            recognitionRef.current.stop();
-        }
+      disconnect();
     };
   }, [disconnect]);
 
