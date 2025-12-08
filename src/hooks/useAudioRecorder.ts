@@ -100,6 +100,7 @@ export function useAudioRecorder(): AudioRecorderHook {
       worklet.connect(audioContext.destination); 
 
       setIsRecording(true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       console.error('Failed to start recording', err);
       // Differentiate errors
