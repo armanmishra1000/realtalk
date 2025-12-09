@@ -236,11 +236,15 @@ TEACHING STYLE:
       };
   
       ws.onclose = (e) => {
-        console.log('Disconnected', e.code, e.reason);
-        console.error('WebSocket Close Code:', e.code);
-        console.error('WebSocket Close Reason:', e.reason);
+        if (e.code === 1000) {
+          console.log('Gemini Live disconnected normally (Code 1000)');
+        } else {
+          console.error('Gemini Live disconnected unexpectedly', {
+            code: e.code,
+            reason: e.reason
+          });
+        }
         setIsConnected(false);
-        // Auto-reconnect logic could go here if needed, but careful with loops
       };
   
       ws.onerror = (err) => {
@@ -259,7 +263,9 @@ TEACHING STYLE:
     stopRecording();
     stopPlayer();
     if (wsRef.current) {
-      wsRef.current.close();
+      if (wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close(1000, 'User initiated disconnect');
+      }
       wsRef.current = null;
     }
     setIsConnected(false);
