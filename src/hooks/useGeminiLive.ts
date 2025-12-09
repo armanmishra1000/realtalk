@@ -5,7 +5,19 @@ import { useAppStore } from '@/lib/store';
 import { Message } from '@/lib/types';
 import { generateId } from '@/lib/utils';
 
-const MODEL = 'models/gemini-2.0-flash-exp';
+const MODEL = 'models/gemini-2.5-flash-native-audio-preview-09-2025';
+
+// Available voice options for natural-sounding speech
+type GeminiVoiceName = 
+  | 'Aoede'      // Breezy - natural casual conversation
+  | 'Sulafat'    // Warm - friendly and comforting
+  | 'Achird'     // Friendly - approachable
+  | 'Vindemiatrix' // Gentle - soft interactions
+  | 'Puck'       // Upbeat - energetic
+  | 'Kore'       // Firm
+  | 'Charon';    // Informative
+
+const VOICE_NAME: GeminiVoiceName = 'Aoede';
 
 // Type definitions for Gemini Live API messages
 interface GeminiServerContent {
@@ -65,12 +77,24 @@ export function useGeminiLive() {
         console.log('Connected to Gemini Live');
         setIsConnected(true);
         
-        let systemPrompt = `You are a helpful language tutor. 
-                       The user's native language is ${settings.nativeLanguage}. 
-                       They are learning ${settings.targetLanguage}. 
-                       Accent preference: ${settings.accent}.
-                       Be encouraging, correct their mistakes gently, and keep the conversation flowing.
-                       If they speak in their native language, translate and guide them.`;
+        let systemPrompt = `You are a warm, friendly language tutor having a casual conversation.
+
+PERSONALITY:
+- Speak naturally like a real person, not a formal teacher
+- Use conversational tone with natural pauses and rhythm
+- Keep responses concise (1-3 sentences usually)
+- Match the user's energy and pace
+- Be encouraging but not overly enthusiastic
+
+LANGUAGE CONTEXT:
+- User's native language: ${settings.nativeLanguage}
+- Learning: ${settings.targetLanguage}
+- Accent preference: ${settings.accent}
+
+TEACHING STYLE:
+- Correct mistakes gently by naturally rephrasing
+- If they speak in their native language, help translate naturally
+- Keep the conversation flowing like chatting with a friend`;
   
         if (currentScenario) {
           systemPrompt += `\n\nSCENARIO MODE ACTIVE:
@@ -90,7 +114,7 @@ export function useGeminiLive() {
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
-                    voiceName: 'Puck'
+                    voiceName: VOICE_NAME
                   }
                 }
               }
