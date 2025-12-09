@@ -51,9 +51,12 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return window.btoa(binary);
 }
 
+export type ConversationState = 'idle' | 'starting' | 'active';
+
 export function useGeminiLive() {
   const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationState, setConversationState] = useState<ConversationState>('idle');
   const wsRef = useRef<WebSocket | null>(null);
   const { isRecording, startRecording, stopRecording, error: recordError } = useAudioRecorder();
   const { playChunk, stop: stopPlayer } = useAudioPlayer();
@@ -77,24 +80,15 @@ export function useGeminiLive() {
         console.log('Connected to Gemini Live');
         setIsConnected(true);
         
-        let systemPrompt = `You are a warm, friendly language tutor having a casual conversation.
+        let systemPrompt = `You're a friendly chat buddy helping someone practice ${settings.targetLanguage}.
 
-PERSONALITY:
-- Speak naturally like a real person, not a formal teacher
-- Use conversational tone with natural pauses and rhythm
-- Keep responses concise (1-3 sentences usually)
-- Match the user's energy and pace
-- Be encouraging but not overly enthusiastic
-
-LANGUAGE CONTEXT:
-- User's native language: ${settings.nativeLanguage}
-- Learning: ${settings.targetLanguage}
-- Accent preference: ${settings.accent}
-
-TEACHING STYLE:
-- Correct mistakes gently by naturally rephrasing
-- If they speak in their native language, help translate naturally
-- Keep the conversation flowing like chatting with a friend`;
+RULES:
+- Keep responses SHORT (1-2 sentences max)
+- Talk like a friend, not a teacher
+- Be casual and fun
+- If they make mistakes, gently correct by naturally rephrasing
+- Ask simple questions to keep the chat going
+- User speaks ${settings.nativeLanguage} natively`;
   
         if (currentScenario) {
           systemPrompt += `\n\nSCENARIO MODE ACTIVE:
@@ -152,7 +146,7 @@ TEACHING STYLE:
                 turns: [{
                   role: 'user',
                   parts: [{ 
-                    text: `Greet me warmly in ${settings.targetLanguage}. Introduce yourself as my friendly language tutor. Keep it brief and natural.`
+                    text: `Say hi in ${settings.targetLanguage} and ask me one simple question to start chatting. Keep it under 2 sentences.`
                   }]
                 }],
                 turnComplete: true
@@ -171,10 +165,10 @@ TEACHING STYLE:
               if (transcript) {
                 setMessages(prev => {
                   const lastMsg = prev[prev.length - 1];
-                  // Append to existing user message if recent
+                  // Append to existing user message if recent (add space between chunks)
                   if (lastMsg && lastMsg.role === 'user' && (Date.now() - lastMsg.timestamp < 3000)) {
                     return prev.map((msg, i) => 
-                      i === prev.length - 1 ? { ...msg, text: msg.text + ' ' + transcript } : msg
+                      i === prev.length - 1 ? { ...msg, text: (msg.text + ' ' + transcript).trim() } : msg
                     );
                   }
                   return [...prev, { id: generateId(), role: 'user', text: transcript, timestamp: Date.now() }];
@@ -188,14 +182,16 @@ TEACHING STYLE:
               if (transcript) {
                 setMessages(prev => {
                   const lastMsg = prev[prev.length - 1];
-                  // Append to existing model message if recent
+                  // Append to existing model message if recent (add space between chunks)
                   if (lastMsg && lastMsg.role === 'model' && (Date.now() - lastMsg.timestamp < 5000)) {
                     return prev.map((msg, i) => 
-                      i === prev.length - 1 ? { ...msg, text: msg.text + transcript, isAudioMessage: false } : msg
+                      i === prev.length - 1 ? { ...msg, text: (msg.text + ' ' + transcript).trim(), isAudioMessage: false } : msg
                     );
                   }
                   return [...prev, { id: generateId(), role: 'model', text: transcript, timestamp: Date.now() }];
                 });
+                // Set conversation to active when AI starts responding
+                setConversationState('active');
               }
             }
 
@@ -269,7 +265,22 @@ TEACHING STYLE:
       wsRef.current = null;
     }
     setIsConnected(false);
+    setConversationState('idle');
+    setMessages([]);
   }, [stopRecording, stopPlayer]);
+
+  // Start conversation - connects and triggers AI greeting
+  const startConversation = useCallback(async () => {
+    if (conversationState !== 'idle') return;
+    
+    setConversationState('starting');
+    try {
+      await connect();
+    } catch (err) {
+      console.error('Failed to start conversation:', err);
+      setConversationState('idle');
+    }
+  }, [conversationState, connect]);
 
   const toggleRecording = useCallback(async () => {
     if (isRecording) {
@@ -312,7 +323,9 @@ TEACHING STYLE:
     isConnected,
     isRecording,
     messages,
+    conversationState,
     toggleRecording,
+    startConversation,
     connect,
     disconnect,
     error: recordError

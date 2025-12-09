@@ -8,10 +8,10 @@ import { Input } from '@/components/ui/Input';
 import { useAppStore } from '@/lib/store';
 import { translateText } from '@/lib/gemini';
 import { generateId } from '@/lib/utils';
-import { Mic, MicOff, Languages, Plus, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Languages, Plus, AlertCircle, Play, Loader2 } from 'lucide-react';
 
 export default function SpeakPage() {
-  const { isConnected, isRecording, messages, toggleRecording, error } = useGeminiLive();
+  const { isConnected, isRecording, messages, conversationState, toggleRecording, startConversation, error } = useGeminiLive();
   const { settings, updateSettings, addVocabulary } = useAppStore();
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [translatedTexts, setTranslatedTexts] = useState<Record<string, string>>({});
@@ -75,9 +75,28 @@ export default function SpeakPage() {
     <div className="flex flex-col h-full bg-gray-50 relative">
       {/* Chat Area */}
       <div className="flex-1 overflow-y-auto p-4 pb-32 space-y-4">
-        {messages.length === 0 && (
-          <div className="flex h-full items-center justify-center text-gray-400">
-            <p>Tap the microphone to start talking...</p>
+        {/* Idle State - Show Start Button */}
+        {conversationState === 'idle' && messages.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-2">Ready to practice?</h2>
+              <p className="text-gray-500 text-sm">Tap Start to begin chatting</p>
+            </div>
+            <Button
+              onClick={startConversation}
+              className="h-16 px-8 rounded-full bg-green-500 hover:bg-green-600 text-white font-medium text-lg shadow-lg hover:scale-105 transition-all"
+            >
+              <Play size={24} className="mr-2" />
+              Start
+            </Button>
+          </div>
+        )}
+
+        {/* Starting State - Show Loading */}
+        {conversationState === 'starting' && messages.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <Loader2 size={40} className="text-blue-500 animate-spin mb-4" />
+            <p className="text-gray-500">Starting conversation...</p>
           </div>
         )}
         
@@ -134,49 +153,51 @@ export default function SpeakPage() {
         <div ref={chatEndRef} />
       </div>
 
-      {/* Floating Bottom Bar */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent pt-12">
-        {/* Error Display */}
-        {error && (
-          <div className="mb-2 text-center">
-            <span className="inline-block px-3 py-1 rounded-full bg-red-100 text-red-600 text-xs font-medium">
-              {error}
-            </span>
-          </div>
-        )}
+      {/* Floating Bottom Bar - Only show when conversation is active */}
+      {conversationState === 'active' && (
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent pt-12">
+          {/* Error Display */}
+          {error && (
+            <div className="mb-2 text-center">
+              <span className="inline-block px-3 py-1 rounded-full bg-red-100 text-red-600 text-xs font-medium">
+                {error}
+              </span>
+            </div>
+          )}
 
-        <div className="flex items-center justify-center gap-4">
-          {/* Status Indicator / Mini Visualizer */}
-          <div className={`flex-1 h-12 rounded-full bg-white border border-gray-200 shadow-lg flex items-center px-4 overflow-hidden transition-all ${isRecording ? 'ring-2 ring-blue-100 border-blue-200' : ''}`}>
-            {isRecording || isConnected ? (
-               <AudioVisualizer 
-                 isActive={isRecording} // Only active when user speaks for now, or we can detect AI audio
-                 mode={isRecording ? 'speaking' : 'listening'}
-                 className="w-full h-8"
-               />
-            ) : (
-              <span className="text-gray-400 text-sm w-full text-center">Ready to chat</span>
-            )}
-          </div>
+          <div className="flex items-center justify-center gap-4">
+            {/* Status Indicator / Mini Visualizer */}
+            <div className={`flex-1 h-12 rounded-full bg-white border border-gray-200 shadow-lg flex items-center px-4 overflow-hidden transition-all ${isRecording ? 'ring-2 ring-blue-100 border-blue-200' : ''}`}>
+              {isRecording || isConnected ? (
+                <AudioVisualizer 
+                  isActive={isRecording}
+                  mode={isRecording ? 'speaking' : 'listening'}
+                  className="w-full h-8"
+                />
+              ) : (
+                <span className="text-gray-400 text-sm w-full text-center">Tap mic to speak</span>
+              )}
+            </div>
 
-          {/* Main Mic Button */}
-          <Button
-            size="icon"
-            className={`h-16 w-16 rounded-full shadow-xl transition-all duration-300 ${
-              isRecording 
-                ? 'bg-red-500 hover:bg-red-600 scale-110 animate-pulse' 
-                : 'bg-blue-600 hover:bg-blue-700 hover:scale-105'
-            }`}
-            onClick={toggleRecording}
-          >
-            {isRecording ? (
-              <MicOff size={28} className="text-white" />
-            ) : (
-              <Mic size={28} className="text-white" />
-            )}
-          </Button>
+            {/* Main Mic Button */}
+            <Button
+              size="icon"
+              className={`h-16 w-16 rounded-full shadow-xl transition-all duration-300 ${
+                isRecording 
+                  ? 'bg-red-500 hover:bg-red-600 scale-110 animate-pulse' 
+                  : 'bg-blue-600 hover:bg-blue-700 hover:scale-105'
+              }`}
+              onClick={toggleRecording}
+            >
+              {isRecording ? (
+                <MicOff size={28} className="text-white" />
+              ) : (
+                <Mic size={28} className="text-white" />
+              )}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
