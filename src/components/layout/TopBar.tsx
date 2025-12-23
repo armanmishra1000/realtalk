@@ -11,7 +11,7 @@ export function TopBar() {
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
           <h1 className="text-lg font-bold tracking-tight text-gray-900">
-            RealTalk<span className="text-blue-600">.ai</span>
+            Sophie<span className="text-blue-600">.ai</span>
           </h1>
         </div>
         
