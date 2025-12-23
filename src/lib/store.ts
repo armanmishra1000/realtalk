@@ -58,7 +58,7 @@ export const useAppStore = create<AppState>()(
       })),
     }),
     {
-      name: 'realtalk-storage',
+      name: 'Sophie-storage',
       storage: createJSONStorage(() => localStorage),
     }
   )

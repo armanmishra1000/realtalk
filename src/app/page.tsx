@@ -56,7 +56,7 @@ export default function LandingPage() {
       <header className="fixed top-0 w-full bg-white/80 p-4 backdrop-blur-md z-10">
         <div className="mx-auto max-w-md text-center">
           <h1 className="text-2xl font-bold tracking-tighter">
-            RealTalk<span className="text-blue-600">.ai</span>
+            Sophie<span className="text-blue-600">.ai</span>
           </h1>
         </div>
       </header>
